@@ -44,7 +44,7 @@ var lastOp string      // last operand for ast
 var lastSynType string // last syntax type for ast
 
 func main() {
-	input := "2*(1+2*3+4+5*6)"
+	input := "2*(3+4*2+6)*5*7+2*3"
 
 	tokens, err := lexer(input)
 	errCheck(err)
@@ -208,8 +208,14 @@ func consumeToken(tokens []token, index int) []token {
 
 // Get last binary expression node from Right
 func getLastBENodeR(node *astNode) *astNode {
-	for node.right != nil && (node.right.syntaxType == "BinaryExpression" || node.right.syntaxType == "ParBinaryExpression") {
-		node = node.right
+	if lastSynType == "ParBinaryExpression" {
+		for node.right != nil && (node.right.syntaxType == "BinaryExpression" || node.right.syntaxType == "ParBinaryExpression") {
+			node = node.right
+		}
+	} else {
+		for node.right != nil && (node.right.syntaxType == "BinaryExpression") {
+			node = node.right
+		}
 	}
 
 	return node
@@ -217,8 +223,14 @@ func getLastBENodeR(node *astNode) *astNode {
 
 // Get last binary expression node from Left
 func getLastBENodeL(node *astNode) *astNode {
-	for node.left != nil && (node.left.syntaxType == "BinaryExpression" || node.left.syntaxType == "ParBinaryExpression") {
-		node = node.left
+	if lastSynType == "ParBinaryExpression" {
+		for node.left != nil && (node.left.syntaxType == "BinaryExpression" || node.left.syntaxType == "ParBinaryExpression") {
+			node = node.left
+		}
+	} else {
+		for node.left != nil && (node.left.syntaxType == "BinaryExpression") {
+			node = node.left
+		}
 	}
 
 	return node
@@ -253,7 +265,8 @@ func parser(tokens []token) {
 			isBeforeNumber = false                                                                                    //onceki tip'in sayi olmadigini bildirdik
 			tokens = parseParanthesisExp(tokens, &i, &isBeforeNumber)                                                 // once parantez icini parse ediyoruz
 			parseBinaryExpression(&tokens[lastIndex-1], &tokens[lastIndex], &tokens[lastIndex-1], "BinaryExpression") // Sonra en son kaldigimiz index'teki islemi parse ediyoruz
-			isBeforeNumber = false
+			isBeforeNumber = true
+			i = i - 1 // Olmali!
 		} else {
 			errCheck(errors.New("Undefined Type Error! Expected: 'Number or Expression' Current: '" + tokens[i].typ + "'"))
 		}
@@ -322,7 +335,6 @@ func parseBinaryExpression(left, current, right *token, synType string) {
 		newNode.left = rightNode
 
 		getAST().root = &newNode
-		println("[T] Test!")
 
 		lastOp = current.value
 		lastSynType = newNode.syntaxType
@@ -337,7 +349,6 @@ func parseBinaryExpression(left, current, right *token, synType string) {
 		lastBE = getLastBENodeL(getAST().root)
 		isDirectionL = true
 		if lastBE.value == STAR || lastBE.value == SLASH {
-
 			lastBE = getAST().root
 		}
 	}
