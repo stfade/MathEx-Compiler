@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -44,8 +45,11 @@ var lastOp string      // last operand for ast
 var lastSynType string // last syntax type for ast
 
 func main() {
-	input := "2*(3+4*2+6)*5*7+2*3"
+	// runTestCase("(1+2)*(3+4)")
+	runAllTestCases()
+}
 
+func runTestCase(input string) {
 	tokens, err := lexer(input)
 	errCheck(err)
 
@@ -54,6 +58,52 @@ func main() {
 
 	result := evaluator(getAST().root)
 	println("[*] Result:", result)
+}
+
+func runAllTestCases() {
+	println("[T] Test case 1")
+	input := "1+2*3+4"
+	test(input, 11)
+
+	println("[T] Test case 2")
+	input = "(1+2*3+4)"
+	test(input, 11)
+
+	println("[T] Test case 3")
+	input = "(1+2)*3"
+	test(input, 9)
+
+	println("[T] Test case 4")
+	input = "(3+4*2+6)*2"
+	test(input, 34)
+
+	println("[T] Test case 5")
+	input = "3*(1+2)"
+	test(input, 9)
+
+	println("[T] Test case 6")
+	input = "2*(3+4*2+6)*5*7+2*3"
+	test(input, 1196)
+
+	println("[T] Test case 7")
+	input = "(1+2)*(3+4)"
+	test(input, 21)
+}
+
+func test(input string, expectedRes int) {
+	tokens, err := lexer(input)
+	errCheck(err)
+
+	parser(tokens)
+	result := evaluator(getAST().root)
+
+	if result == expectedRes {
+		println("[T] T:: " + input + " = " + fmt.Sprint(result) + " is correct! Expected: " + fmt.Sprint(expectedRes))
+	} else {
+		println("[T] F:: " + input + " = " + fmt.Sprint(result) + " is not correct! Expected: " + fmt.Sprint(expectedRes))
+	}
+
+	getAST().root = nil
 }
 
 func errCheck(err error) {
@@ -161,6 +211,14 @@ func printTokens(tokens []token) {
 	}
 }
 
+// Consume target token
+func consumeToken(tokens []token, index int) []token {
+	oLen := len(tokens)
+	newT := tokens[0:index]
+	newT = append(newT, tokens[index+1:oLen]...)
+	return newT
+}
+
 func getAST() *abstractSyntaxTree {
 	if singletonAST == nil {
 		singletonAST = &abstractSyntaxTree{
@@ -198,12 +256,26 @@ func printAST() {
 	printNextNode(getAST().root, 0)
 }
 
-// Consume target token
-func consumeToken(tokens []token, index int) []token {
-	oLen := len(tokens)
-	newT := tokens[0:index]
-	newT = append(newT, tokens[index+1:oLen]...)
-	return newT
+func newAstNode(left, current, right *token, synType string) *astNode {
+	leftNode, err := parseNumberLiteral(left)
+	errCheck(err)
+
+	rightNode, err := parseNumberLiteral(right)
+	errCheck(err)
+
+	return &astNode{
+		syntaxType: synType, // "BinaryExpression" || "ParBinaryExpression"
+		value:      current.value,
+		left:       leftNode,
+		right:      rightNode,
+	}
+}
+
+func printAstNode(node *astNode) {
+	println("Node.type: " + node.syntaxType)
+	println("Node.val: " + node.value)
+	println("Node.l.val: " + node.left.value)
+	println("Node.r.val: " + node.right.value)
 }
 
 // Get last binary expression node from Right
@@ -255,16 +327,36 @@ func parser(tokens []token) {
 			tokens = parseParanthesisExp(tokens, &i, &isBeforeNumber)
 		}
 
+		if i >= len(tokens) {
+			break
+		}
+
 		if isBeforeNumber && tokens[i].typ == "operation" && tokens[i+1].typ == "number" {
-			parseBinaryExpression(&tokens[i-1], &tokens[i], &tokens[i+1], "BinaryExpression")
+			node := newAstNode(&tokens[i-1], &tokens[i], &tokens[i+1], "BinaryExpression")
+			parseBinaryExpression(node)
+
 			isBeforeNumber = false
+		} else if !isBeforeNumber && lastSynType == "ParBinaryExpression" && tokens[i].typ == "operation" && tokens[i+1].typ == "parOpen" {
+			lastIndex := i                                            // En son biraktigimiz index. Cunku bu index parseParanthesis'ten sonra degisecek
+			i = i + 1                                                 // index'i parantezin oldugu index'e kaydirdik
+			isBeforeNumber = false                                    //onceki tip'in sayi olmadigini bildirdik
+			tokens = parseParanthesisExp(tokens, &i, &isBeforeNumber) // once parantez icini parse ediyoruz
+
+			node := newAstNode(&tokens[lastIndex-1], &tokens[lastIndex], &tokens[lastIndex+1], "BinaryExpression")
+			parseBinaryExpression(node) // Sonra en son kaldigimiz index'teki islemi parse ediyoruz
+
+			isBeforeNumber = true
+			i = i - 1 // Olmali!
 		} else if isBeforeNumber && tokens[i].typ == "operation" && tokens[i+1].typ == "parOpen" {
 			// 2 * (1+2) gibi islemler icin su sekilde davranmasini sagliycaz -> (1+2) * 2 - Bunun icin de islemin solundaki sayiyi saga vercez
-			lastIndex := i                                                                                            // En son biraktigimiz index. Cunku bu index parseParanthesis'ten sonra degisecek
-			i = i + 1                                                                                                 // index'i parantezin oldugu index'e kaydirdik
-			isBeforeNumber = false                                                                                    //onceki tip'in sayi olmadigini bildirdik
-			tokens = parseParanthesisExp(tokens, &i, &isBeforeNumber)                                                 // once parantez icini parse ediyoruz
-			parseBinaryExpression(&tokens[lastIndex-1], &tokens[lastIndex], &tokens[lastIndex-1], "BinaryExpression") // Sonra en son kaldigimiz index'teki islemi parse ediyoruz
+			lastIndex := i                                            // En son biraktigimiz index. Cunku bu index parseParanthesis'ten sonra degisecek
+			i = i + 1                                                 // index'i parantezin oldugu index'e kaydirdik
+			isBeforeNumber = false                                    //onceki tip'in sayi olmadigini bildirdik
+			tokens = parseParanthesisExp(tokens, &i, &isBeforeNumber) // once parantez icini parse ediyoruz
+
+			node := newAstNode(&tokens[lastIndex-1], &tokens[lastIndex], &tokens[lastIndex-1], "BinaryExpression")
+			parseBinaryExpression(node) // Sonra en son kaldigimiz index'teki islemi parse ediyoruz
+
 			isBeforeNumber = true
 			i = i - 1 // Olmali!
 		} else {
@@ -290,7 +382,8 @@ func parseParanthesisExp(tokens []token, index *int, isBfrNum *bool) []token {
 		}
 
 		if isBeforeNumber && tokens[i].typ == "operation" && tokens[i+1].typ == "number" {
-			parseBinaryExpression(&tokens[i-1], &tokens[i], &tokens[i+1], "ParBinaryExpression")
+			node := newAstNode(&tokens[i-1], &tokens[i], &tokens[i+1], "ParBinaryExpression")
+			parseBinaryExpression(node)
 			isBeforeNumber = false
 		} else {
 			errCheck(errors.New("Undefined Type Error! Expected: 'Number or Paranthesis Expression' Current: '" + tokens[i].typ + "'"))
@@ -306,23 +399,11 @@ func parseParanthesisExp(tokens []token, index *int, isBfrNum *bool) []token {
 	return tokens
 }
 
-func parseBinaryExpression(left, current, right *token, synType string) {
-	leftNode, err := parseNumberLiteral(left)
-	errCheck(err)
-
-	rightNode, err := parseNumberLiteral(right)
-	errCheck(err)
-
-	newNode := astNode{
-		syntaxType: synType, // "BinaryExpression" || "ParBinaryExpression"
-		value:      current.value,
-		left:       leftNode,
-		right:      rightNode,
-	}
-
+func parseBinaryExpression(newNode *astNode) {
 	if getAST().root == nil {
-		getAST().root = &newNode
-		lastOp = current.value
+		getAST().root = newNode
+
+		lastOp = newNode.value
 		lastSynType = newNode.syntaxType
 
 		return
@@ -331,12 +412,12 @@ func parseBinaryExpression(left, current, right *token, synType string) {
 	// Eger son eklenmis exp parantez iciyse ve yeni gelen disindaysa
 	if lastSynType == "ParBinaryExpression" && newNode.syntaxType == "BinaryExpression" {
 		temp := *getAST().root
+		newNode.left = newNode.right
 		newNode.right = &temp
-		newNode.left = rightNode
 
-		getAST().root = &newNode
+		getAST().root = newNode
 
-		lastOp = current.value
+		lastOp = newNode.value
 		lastSynType = newNode.syntaxType
 		return
 	}
@@ -355,16 +436,16 @@ func parseBinaryExpression(left, current, right *token, synType string) {
 
 	if (lastOp == STAR || lastOp == SLASH) && (newNode.value == PLUS || newNode.value == MINUS) {
 		temp := *lastBE
+		newNode.left = newNode.right
 		newNode.right = &temp
-		newNode.left = rightNode
 
 		if lastBE == getAST().root {
-			getAST().root = &newNode
+			getAST().root = newNode
 		} else {
-			lastBE = &newNode
+			lastBE = newNode
 		}
 
-		lastOp = current.value
+		lastOp = newNode.value
 		lastSynType = newNode.syntaxType
 		return
 	}
@@ -372,17 +453,15 @@ func parseBinaryExpression(left, current, right *token, synType string) {
 	if (lastOp == PLUS || lastOp == MINUS) && (newNode.value == STAR || newNode.value == SLASH) {
 		if isDirectionL {
 			temp := lastBE.left
-			newNode.right = rightNode
 			newNode.left = temp
-			lastBE.left = &newNode
+			lastBE.left = newNode
 		} else {
 			temp := lastBE.right
 			newNode.left = temp
-			newNode.right = rightNode
-			lastBE.right = &newNode
+			lastBE.right = newNode
 		}
 
-		lastOp = current.value
+		lastOp = newNode.value
 		lastSynType = newNode.syntaxType
 		return
 	}
@@ -390,10 +469,9 @@ func parseBinaryExpression(left, current, right *token, synType string) {
 	// Eger son eklenmis node ve yeni node'un isaretleri ayni ise (+,- ya da *,/ ikilileri) yeni geleni direkt saga ekliycez
 	temp := lastBE.right
 	newNode.left = temp // It is same with leftNode
-	newNode.right = rightNode
-	lastBE.right = &newNode
+	lastBE.right = newNode
 
-	lastOp = current.value
+	lastOp = newNode.value
 	lastSynType = newNode.syntaxType
 }
 
