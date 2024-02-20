@@ -24,5 +24,5 @@ It just translates the expressions to some simple words.
 * [Functional Parsing](https://www.youtube.com/watch?v=dDtZLm7HIJs)
 
 ### Example Usage
-![Usage](/examples/example usage.png)
+![Usage](/examples/example%20usage.png)
 ![Result](/examples/result.png)
