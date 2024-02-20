@@ -24,8 +24,11 @@ It just translates the expressions to some simple words.
 * [Functional Parsing](https://www.youtube.com/watch?v=dDtZLm7HIJs)
 
 ### Example Usage
-Main
+_Main_
+<br/>
 ![Usage](/examples/example%20usage.png)
 <br/>
-result.txt file
+<br/>
+_result.txt file_
+<br/>
 ![Result](/examples/result.png)
